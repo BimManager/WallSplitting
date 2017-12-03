@@ -1,0 +1,41 @@
+public void FunWithDividingWalls()
+		{
+			Document doc=this.ActiveUIDocument.Document;
+			Selection sel=this.ActiveUIDocument.Selection;
+			
+			Reference r=sel.PickObject(ObjectType.Element);
+			
+			Element elem=doc.GetElement(r);
+			
+			IList<ElementId> elemIds=
+				SplittingWallsUtils.GetInterferingElemIds(doc, elem);
+			
+			//elemIds.RemoveAt(0);
+			//sel.SetElementIds(elemIds);
+			
+			IList<Solid> solidsToCutOut=new List<Solid>();
+			foreach(ElementId id in elemIds)
+			{
+				Element currElem=doc.GetElement(id);
+				Solid solid=SplittingWallsUtils.GetSolid(elem);
+				if(solid!=null)
+					solidsToCutOut.Add(solid);
+			}
+			
+			Solid resultingSolid=
+				SplittingWallsUtils.GetResultingSolid(
+					SplittingWallsUtils.GetSolid(elem), solidsToCutOut);
+			
+			Face face=null;
+			foreach(Face f in resultingSolid.Faces)
+			{
+				if(f.ComputeNormal(new UV(0,0)).Normalize()
+				   .CrossProduct(((Wall)elem).Orientation.Normalize()).GetLength()==0)
+					face=f;
+			}
+			
+			IList<UV> uvs=new List<UV> {new UV(0,0)};
+			IList<double> values=new List<double> {1};
+			AVFUtils.ShowValuesOnFace(doc, face, uvs, values);
+			
+		}
