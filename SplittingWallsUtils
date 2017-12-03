@@ -1,0 +1,70 @@
+public static class SplittingWallsUtils
+	{
+		public static IList<ElementId> GetInterferingElemIds(Document doc, Element elem)
+		{
+			Solid solid=GetSolid(elem);
+			FilteredElementCollector collector=
+				new FilteredElementCollector(doc);
+			ElementIntersectsSolidFilter intrudingElemFilter=
+				new ElementIntersectsSolidFilter(solid, false);
+			ExclusionFilter exclusionFilter=
+				new ExclusionFilter(new List<ElementId> {elem.Id});
+			ICollection<ElementId> envadingElemIds=collector
+				.WherePasses(exclusionFilter)
+				.WherePasses(intrudingElemFilter)
+				.WhereElementIsNotElementType()
+				.ToElementIds();
+			
+			envadingElemIds.OrderBy((ElementId id)=>
+			                        {
+			                        	Element e=doc.GetElement(id);
+			                        	return ((Level)doc.GetElement(e.LevelId)).Elevation;
+			                        });
+			
+			return envadingElemIds.ToList();
+		}
+		
+		public static Solid GetSolid(Element elem)
+		{
+			foreach(GeometryObject gObj
+			        in elem.get_Geometry(
+			        	new Options {IncludeNonVisibleObjects=false, DetailLevel=ViewDetailLevel.Fine}))
+			{
+				if(gObj is Solid)
+					return (Solid)gObj;
+				else if(gObj is GeometryInstance)
+					return SolidFinder((GeometryInstance)gObj);
+				else
+					continue;
+			}
+			return null;
+		}
+		
+		static Solid SolidFinder(GeometryInstance gInst)
+		{
+			foreach(GeometryObject gObj in gInst.GetSymbolGeometry(gInst.Transform))
+			{
+				if(gObj is Solid)
+					return (Solid)gObj;
+				else if(gObj is GeometryInstance)
+					return SolidFinder((GeometryInstance)gObj);
+				else
+					continue;
+			}
+			
+			return null;
+		}
+		
+		public static Solid GetResultingSolid(Solid solid, IList<Solid> solids)
+		{
+			Solid resultingSolid=solid;
+			foreach(Solid currSolid in solids)
+			{
+				BooleanOperationsUtils
+					.ExecuteBooleanOperation(resultingSolid, currSolid,
+					                         BooleanOperationsType.Difference);
+			}
+			
+			return resultingSolid;
+		}
+	}
