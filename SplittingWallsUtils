@@ -40,6 +40,36 @@ public static class SplittingWallsUtils
 			return null;
 		}
 		
+		public static void GetDirectShape(Document doc, Solid resultingSolid)
+		{
+			using(Transaction t=new Transaction(doc,"Create DirectShape object"))
+				{
+					t.Start();
+					DirectShape ds=DirectShape
+						.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel),
+						               doc.Application.ActiveAddInId.ToString(),
+						               "Geometry object id");
+					ds.SetShape(new GeometryObject[] {resultingSolid});
+					t.Commit();
+				}
+		}
+		
+		public static IList<Solid> GetInterferingElemsAsSolids(Document doc, Element elem)
+		{
+			IList<ElementId> intrudingElemIds=
+				GetInterferingElemIds(doc, elem);
+			IList<Solid> solids=
+				new List<Solid>();
+			
+			foreach(ElementId id in intrudingElemIds)
+			{
+				Element currElem=doc.GetElement(id);
+				solids.Add(GetSolid(currElem));
+			}
+			
+			return solids;
+		}
+		
 		static Solid SolidFinder(GeometryInstance gInst)
 		{
 			foreach(GeometryObject gObj in gInst.GetSymbolGeometry(gInst.Transform))
@@ -58,13 +88,33 @@ public static class SplittingWallsUtils
 		public static Solid GetResultingSolid(Solid solid, IList<Solid> solids)
 		{
 			Solid resultingSolid=solid;
+			
 			foreach(Solid currSolid in solids)
 			{
-				BooleanOperationsUtils
+				resultingSolid=BooleanOperationsUtils
 					.ExecuteBooleanOperation(resultingSolid, currSolid,
 					                         BooleanOperationsType.Difference);
 			}
 			
 			return resultingSolid;
 		}
+		
+		public static XYZ GetDirectionVector(Curve curve)
+		{
+			XYZ direction=null;
+			
+			if(curve is Line)
+			{
+				// Pick up the tangent vector of the wall
+				direction=curve.ComputeDerivatives(0, true).BasisX.Normalize();
+			}
+			else
+			{
+				direction=(curve.GetEndPoint(1)
+				           - curve.GetEndPoint(0)).Normalize();
+			}
+			
+			return direction;
+		}
+		
 	}
