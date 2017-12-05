@@ -89,3 +89,73 @@ public void FunWithSplittingColumn()
 			}
 			
 		}
+
+
+static Solid GetSolid(Element elem)
+		{
+			Options opts=new Options {IncludeNonVisibleObjects=true};
+			
+			foreach(GeometryObject gObjL1 in elem.get_Geometry(new Options()))
+			{
+				if(gObjL1 is GeometryInstance)
+				{
+					GeometryInstance instance=
+						gObjL1 as GeometryInstance;
+					
+					foreach(GeometryObject gObjL2 in
+					        instance.GetInstanceGeometry(instance.Transform))
+					{
+						if(gObjL2 is Solid)
+						{
+							return (Solid)gObjL2;
+						}
+					}
+				}
+				
+				else if(gObjL1 is Solid)
+				{
+					return (Solid)gObjL1;
+				}
+			}
+			
+			return null;
+		}
+		
+		static Curve GetColumnAxis(Element column)
+		{
+			foreach(GeometryObject gObjL1 in
+			        column.get_Geometry(new Options{IncludeNonVisibleObjects=true}))
+			{
+				if(gObjL1 is Curve)
+					return (Curve)gObjL1;
+			}
+			
+			return null;
+			
+		}
+		
+		static ICollection<ElementId> FindElementsInterferingWithThisElement(Document doc, Element column)
+		{
+			// Setup the filtered element collector for all document elements
+			FilteredElementCollector interferingCollector=
+				new FilteredElementCollector(doc);
+			
+			// Only accept floor element instances
+			interferingCollector.OfClass(typeof(Floor));
+			interferingCollector.WhereElementIsNotElementType();
+			
+			// Exclude intersections with the column itself
+			List<ElementId> excludedElements=
+				new List<ElementId> {column.Id};
+			ExclusionFilter exclusionFilter=
+				new ExclusionFilter(excludedElements);
+			interferingCollector.WherePasses(exclusionFilter);
+			
+			// Set up a filter that matches elements the solid geometry of which
+			// intersects with the column
+			ElementIntersectsSolidFilter intersectionFilter=
+				new ElementIntersectsSolidFilter(GetSolid(column));
+			interferingCollector.WherePasses(intersectionFilter);
+			
+			return interferingCollector.ToElementIds();
+		}
