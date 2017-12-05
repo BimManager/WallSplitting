@@ -1,41 +1,184 @@
-public void FunWithDividingWalls()
+public void FunWithSplittingWall()
 		{
+			// Get the hold of the active document
 			Document doc=this.ActiveUIDocument.Document;
 			Selection sel=this.ActiveUIDocument.Selection;
 			
-			Reference r=sel.PickObject(ObjectType.Element);
+			TextWriterTraceListener fileListener=
+				new TextWriterTraceListener(File.Open(@"c:\users\kozlovk\documents\debug\SplittingWalls.txt",
+				                                      FileMode.OpenOrCreate));
 			
-			Element elem=doc.GetElement(r);
+			Debug.Listeners.Add(fileListener);
+			Debug.IndentLevel=0;
 			
-			IList<ElementId> elemIds=
-				SplittingWallsUtils.GetInterferingElemIds(doc, elem);
-			
-			//elemIds.RemoveAt(0);
-			//sel.SetElementIds(elemIds);
-			
-			IList<Solid> solidsToCutOut=new List<Solid>();
-			foreach(ElementId id in elemIds)
+			try
 			{
-				Element currElem=doc.GetElement(id);
-				Solid solid=SplittingWallsUtils.GetSolid(elem);
-				if(solid!=null)
-					solidsToCutOut.Add(solid);
+				// Propmt the user to select a wall
+				Reference r=sel.PickObject(ObjectType.Element,
+				                           "Please select a column");
+				Element wallElem=doc.GetElement(r);
+				Wall wall=wallElem as Wall;
+				
+				if(wall==null)
+					throw new ArgumentNullException("The selected element is not a wall.");
+				
+				WallType wallType=wall.WallType;
+				Curve wallCurve=((LocationCurve)wall.Location).Curve;
+				
+				// Pick up the direction vector
+				XYZ direction=SplittingWallsUtils
+					.GetDirectionVector(wallCurve);
+				
+				// Compute the normal vector via the cross product.
+				XYZ normal=XYZ.BasisZ.CrossProduct(direction);
+				
+				// Construct a plane for measuring curves's heights
+				Plane geomPlane=new Plane(normal, wallCurve.GetEndPoint(0));
+				
+				// Acquire interfering elements' ids
+				ICollection<ElementId> interferingElemIds=
+					SplittingWallsUtils.GetInterferingElemIds(doc, wall);
+				
+				if(interferingElemIds.Count==0)
+					return;
+				
+				foreach(ElementId id in interferingElemIds)
+				{
+					Element elem=doc.GetElement(id);
+					Level lvl=doc.GetElement(elem.LevelId) as Level;
+					Debug.WriteLine(string.Format("Elem: {0}; Level: {1}",
+					                              elem.Name, lvl.Elevation));
+				}
+				
+				// Highlight the found elements in Revit
+				if(interferingElemIds!=null &&
+				   interferingElemIds.Count!=0)
+				{
+					this.ActiveUIDocument.ShowElements(interferingElemIds);
+					this.ActiveUIDocument.Selection.SetElementIds(interferingElemIds);
+				}
+				
+				
+				XYZ wallOrientation=wall.Orientation;
+				
+				// Get hold of all solids involed in the clash
+				Solid wallSolid=SplittingWallsUtils.GetSolid(wall);
+				IList<Solid> musclingInSolids=SplittingWallsUtils
+					.GetInterferingElemsAsSolids(doc, wall);
+				
+				
+				Debug.WriteLine(string.Format("musclingInSolids.Count={0}",
+				                              musclingInSolids.Count));
+				
+				// Perform the boolean opeartions to get the resulting solid
+				Solid resultingSolid=SplittingWallsUtils
+					.GetResultingSolid(wallSolid, musclingInSolids);
+				
+				// Insert this solid as a directshape into the document
+				//SplittingWallsUtils.GetDirectShape(doc, resultingSolid);
+				
+				
+				// Find the face whose normal matches the wall's normal
+				Face face=null;
+				foreach(Face currFace in resultingSolid.Faces)
+				{
+					XYZ faceNormal=currFace.ComputeNormal(new UV(0,0)).Normalize();
+					
+					
+					Debug.WriteLine(string.Format("wo[{0}] * fn[{1}] = {2}",
+					                              wallOrientation, faceNormal,
+					                              wallOrientation.DotProduct(faceNormal)));
+					Debug.WriteLine(string.Format("dir[{0}] * [{1}] = {2}",
+					                              direction, faceNormal,
+					                              direction.DotProduct(faceNormal)));
+					
+					if(Math.Round(
+						wallOrientation.DotProduct(faceNormal),2)>0.8)
+					{
+						face=currFace;
+					}
+				}
+				
+				if(face==null)
+					throw new ArgumentNullException("Face is null");
+				
+				// Get a set of curveloops from the face
+				IList<CurveLoop> crvLoops=face.GetEdgesAsCurveLoops();
+				
+				IList<CurveLoop> orderedCrvloops=
+					(crvLoops.OrderBy(crvloop=>
+					                  {
+					                  	Curve crv=crvloop
+					                  		.Where(c=>SplittingWallsUtils
+					                  		       .GetDirectionVector(c).Z==1)
+					                  		.First();
+					                  	
+					                  	return crv.GetEndPoint(0).Z;
+					                  })).ToList();
+				
+				using(Transaction t=new Transaction(doc,"Create walls"))
+				{
+					t.Start();
+					for(int i=0; i<orderedCrvloops.Count; i++)
+					{
+						//double currWallHeight=crvLoops[i].GetRectangularHeight(geomPlane);
+						Curve selectedCrv=orderedCrvloops[i].Where(crv=>
+						                                           SplittingWallsUtils
+						                                           .GetDirectionVector(crv).Z==1).First();
+						
+						double currWallHeight=selectedCrv.ApproximateLength;
+						
+						Debug.WriteLine(string.Format("Wall Height = {0}mm; crv.EndPoint(0).Z={1}",
+						                              UnitUtils
+						                              .ConvertFromInternalUnits
+						                              (currWallHeight, DisplayUnitType.DUT_MILLIMETERS),
+						                              selectedCrv.GetEndPoint(0).Z));
+						if(i==0)
+						{
+							double offset=wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble();
+							
+							Wall.Create(doc, ((LocationCurve)wall.Location).Curve, wallType.Id, wall.LevelId,
+							            currWallHeight, offset, false, true);
+						}
+						else
+						{
+							Element intruder=doc.GetElement(interferingElemIds
+							                                .ElementAt(i-1));
+							
+							ElementId currLevelId=intruder.LevelId;
+							
+							double offset=intruder
+								.get_Parameter(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM)
+								.AsDouble();
+							
+							Wall.Create(doc, ((LocationCurve)wall.Location).Curve, wallType.Id, currLevelId,
+							            currWallHeight, offset, false, true);
+						}
+					}
+					doc.Delete(wall.Id);
+					t.Commit();
+				}
+				
+				
 			}
-			
-			Solid resultingSolid=
-				SplittingWallsUtils.GetResultingSolid(
-					SplittingWallsUtils.GetSolid(elem), solidsToCutOut);
-			
-			Face face=null;
-			foreach(Face f in resultingSolid.Faces)
+			catch(Autodesk.Revit.Exceptions.OperationCanceledException)
 			{
-				if(f.ComputeNormal(new UV(0,0)).Normalize()
-				   .CrossProduct(((Wall)elem).Orientation.Normalize()).GetLength()==0)
-					face=f;
+				
 			}
-			
-			IList<UV> uvs=new List<UV> {new UV(0,0)};
-			IList<double> values=new List<double> {1};
-			AVFUtils.ShowValuesOnFace(doc, face, uvs, values);
-			
+			catch(Exception ex)
+			{
+				Debug.WriteLine(string.Format("StackTrace:\n{0}\nMessage:\n{1}",
+				                              ex.StackTrace, ex.Message));
+				
+				TaskDialog.Show("Exception",string.Format("StackTrace:\n{0}\nMessage:\n{1}",
+				                                          ex.StackTrace, ex.Message));
+			}
+			finally
+			{
+				fileListener.Flush();
+				fileListener.Close();
+				Debug.Listeners.Remove(fileListener);
+				Debug.Flush();
+				Debug.Close();
+			}
 		}
