@@ -15,13 +15,13 @@ public static class SplittingWallsUtils
 				.WhereElementIsNotElementType()
 				.ToElementIds();
 			
-			envadingElemIds.OrderBy((ElementId id)=>
-			                        {
-			                        	Element e=doc.GetElement(id);
-			                        	return ((Level)doc.GetElement(e.LevelId)).Elevation;
-			                        });
+			IList<ElementId> orderedEnvadingElemIds=envadingElemIds.OrderBy((ElementId id)=>
+			                                                                {
+			                                                                	Element e=doc.GetElement(id);
+			                                                                	return ((Level)doc.GetElement(e.LevelId)).Elevation;
+			                                                                }).ToList();
 			
-			return envadingElemIds.ToList();
+			return orderedEnvadingElemIds;
 		}
 		
 		public static Solid GetSolid(Element elem)
@@ -43,15 +43,15 @@ public static class SplittingWallsUtils
 		public static void GetDirectShape(Document doc, Solid resultingSolid)
 		{
 			using(Transaction t=new Transaction(doc,"Create DirectShape object"))
-				{
-					t.Start();
-					DirectShape ds=DirectShape
-						.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel),
-						               doc.Application.ActiveAddInId.ToString(),
-						               "Geometry object id");
-					ds.SetShape(new GeometryObject[] {resultingSolid});
-					t.Commit();
-				}
+			{
+				t.Start();
+				DirectShape ds=DirectShape
+					.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel),
+					               doc.Application.ActiveAddInId.ToString(),
+					               "Geometry object id");
+				ds.SetShape(new GeometryObject[] {resultingSolid});
+				t.Commit();
+			}
 		}
 		
 		public static IList<Solid> GetInterferingElemsAsSolids(Document doc, Element elem)
