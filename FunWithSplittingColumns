@@ -1,0 +1,91 @@
+public void FunWithSplittingColumn()
+		{
+			// Get the hold of the active document
+			Document doc=this.ActiveUIDocument.Document;
+			Selection sel=this.ActiveUIDocument.Selection;
+			
+			// Propmt the user to select a column
+			Reference r=sel.PickObject(ObjectType.Element,
+			                           "Please select a column");
+			
+			Element column=doc.GetElement(r);
+			
+			FamilyInstance colAsFI=column as FamilyInstance;
+			FamilySymbol colFamSmbl=colAsFI.Symbol;
+			
+			ICollection<ElementId> interferingElemIds=
+				FindElementsInterferingWithThisElement(doc, column);
+			
+			if(interferingElemIds!=null &&
+			   interferingElemIds.Count!=0)
+			{
+				// Select interfering slabs
+				this.ActiveUIDocument.ShowElements(interferingElemIds);
+				this.ActiveUIDocument.Selection.SetElementIds(interferingElemIds);
+				
+				List<Curve> crvs=new List<Curve>();
+				IDictionary<Curve, Level> crvsLvls=new Dictionary<Curve, Level>();
+				
+				Curve currCrv=GetColumnAxis(column);
+				
+				IList<ElementId> orderedIntruderIds=
+					interferingElemIds.OrderBy(id=>
+					                           {
+					                           	Element e=doc.GetElement(id);
+					                           	Level lvl=doc.GetElement(e.LevelId) as Level;
+					                           	return lvl.Elevation;
+					                           }).ToList();
+				
+				ElementId prevElemId=(doc.GetElement(interferingElemIds.ElementAt(0))).LevelId;
+				
+				for(int i=0; i<orderedIntruderIds.Count; i++)
+				{
+					Element currElem=doc.GetElement(orderedIntruderIds.ElementAt(i));
+					Solid elemSolid=GetSolid(currElem);
+					
+					SolidCurveIntersection results=
+						elemSolid.IntersectWithCurve
+						(currCrv,
+						 new SolidCurveIntersectionOptions 
+						 {ResultType=SolidCurveIntersectionMode.CurveSegmentsOutside});
+					
+					if(results.SegmentCount==2)
+					{
+						// if it is not the last segment
+						if(i!=orderedIntruderIds.Count-1)
+						{
+							crvs.Add(results.GetCurveSegment(0));
+							currCrv=results.GetCurveSegment(1);
+							crvsLvls.Add(results.GetCurveSegment(0),(Level)doc.GetElement(prevElemId));
+						}
+						else
+						{
+							crvs.Add(results.GetCurveSegment(0));
+							crvs.Add(results.GetCurveSegment(1));
+							crvsLvls.Add(results.GetCurveSegment(0), (Level)doc.GetElement(prevElemId));
+							crvsLvls.Add(results.GetCurveSegment(1), (Level)doc.GetElement(currElem.LevelId));
+						}
+					}
+					else
+					{
+						currCrv=results.GetCurveSegment(0);
+					}
+					prevElemId=currElem.LevelId;
+				}
+				
+				using(Transaction t=new Transaction(doc, "Split Column"))
+				{
+					t.Start();
+					foreach(Curve crv in crvsLvls.Keys)
+					{
+						doc.Create.NewFamilyInstance
+							(crv, colFamSmbl, crvsLvls[crv], StructuralType.Column);
+					}
+					
+					doc.Delete(column.Id);
+					t.Commit();
+					
+				}
+			}
+			
+		}
