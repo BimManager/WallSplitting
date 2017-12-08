@@ -1,0 +1,7 @@
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\bin\Debug\TektaRevitPlugins.dll
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\bin\Debug\TektaRevitPlugins.pdb
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\obj\Debug\TektaRevitPlugins.csprojResolveAssemblyReference.cache
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\obj\Debug\TektaRevitPlugins.csproj.CoreCompileInputs.cache
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\obj\Debug\TektaRevitPlugins.dll
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\obj\Debug\TektaRevitPlugins.pdb
+c:\users\kozlovk\source\repos\TektaRevitPlugins\TektaRevitPlugins\bin\Debug\TektaRevitPlugins.addin
